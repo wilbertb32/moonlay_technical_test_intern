@@ -8,14 +8,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Task } from '@/lib/auth';
-import { getUsers } from '@/lib/tasks';
+import { getUsers, createTask } from '@/lib/tasks';
 import { DatePicker } from '@/components/ui/date-picker';
 
 interface TaskFormProps {
   task?: Task | null;
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (taskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  onSubmit: (taskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt'> & { user_id: string }) => void;
 }
 
 export function TaskForm({ task, isOpen, onClose, onSubmit }: TaskFormProps) {
@@ -24,6 +24,8 @@ export function TaskForm({ task, isOpen, onClose, onSubmit }: TaskFormProps) {
   const [status, setStatus] = useState<Task['status']>('Todo');
   const [deadline, setDeadline] = useState<Date>();
   const [assigneeId, setAssigneeId] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const users = getUsers();
 
@@ -43,19 +45,61 @@ export function TaskForm({ task, isOpen, onClose, onSubmit }: TaskFormProps) {
     }
   }, [task]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
+    setError(null);
     if (!deadline) return;
 
-    onSubmit({
-      title,
-      description,
-      status,
-      deadline: deadline.toISOString(),
-      assigneeId,
-    });
+    // Replace with actual user_id (e.g., from context or props)
+    const user_id = "1";
+    try {
+      // Send deadline as local date string (YYYY-MM-DD) to avoid timezone issues
+      const localDateString = deadline.toISOString().slice(0, 10);
+      if (task && task.id) {
+        // Edit mode: update existing task
+        const { updateTask } = await import('@/lib/tasks');
+        await updateTask(task.id, {
+          title,
+          description,
+          status,
+          deadline: localDateString,
+          assigneeId,
+        });
+      } else {
+        // Create mode: create new task
+        await createTask({
+          title,
+          description,
+          status,
+          deadline: localDateString,
+          assigneeId,
+          user_id,
+        });
+      }
+      onClose();
+    } catch (error) {
+      setError('Failed to save task');
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    onClose();
+  const handleDelete = async () => {
+    if (!task || !task.id) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const { deleteTask } = await import('@/lib/tasks');
+      await deleteTask(task.id);
+      onClose();
+    } catch (error) {
+      setError('Failed to delete task');
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -128,13 +172,25 @@ export function TaskForm({ task, isOpen, onClose, onSubmit }: TaskFormProps) {
             />
           </div>
 
+          {error && <div className="text-red-500 text-sm">{error}</div>}
           <div className="flex gap-2 pt-4">
             <Button type="button" variant="outline" onClick={onClose} className="flex-1">
               Cancel
             </Button>
-            <Button type="submit" className="flex-1" disabled={!deadline || !assigneeId}>
-              {task ? 'Update' : 'Create'} Task
+            <Button type="submit" className="flex-1" disabled={!deadline || !assigneeId || loading}>
+              {loading ? (task ? 'Updating...' : 'Creating...') : (task ? 'Update' : 'Create')} Task
             </Button>
+            {task && task.id && (
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={handleDelete}
+                className="flex-1"
+                disabled={loading}
+              >
+                {loading ? 'Deleting...' : 'Delete'}
+              </Button>
+            )}
           </div>
         </form>
       </DialogContent>

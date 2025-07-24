@@ -33,6 +33,23 @@ def login():
     access_token = create_access_token(identity=user['id'])
     return jsonify(access_token=access_token)
 
+
+@app.route('/api/signup', methods=['POST'])
+def signup():
+    username = request.json.get('username')
+    if not username:
+        return jsonify({"msg": "Username required"}), 400
+    if any(u['username'] == username for u in users):
+        return jsonify({"msg": "Username already taken"}), 400
+    new_user = {
+        "id": str(uuid.uuid4()),
+        "username": username
+    }
+    users.append(new_user)
+    access_token = create_access_token(identity=new_user['id'])
+    return jsonify(access_token=access_token), 201
+
+
 # Get all users (assignee list)
 @app.route('/api/users', methods=['GET'])
 @jwt_required()

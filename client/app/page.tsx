@@ -14,6 +14,7 @@ import { isAuthenticated } from '@/lib/auth';
 import { getTasks, createTask, updateTask, deleteTask } from '@/lib/tasks';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { useToast } from '@/hooks/use-toast';
 
 export default function Home() {
   const [authenticated, setAuthenticated] = useState(false);
@@ -22,29 +23,12 @@ export default function Home() {
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
-  
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
   // Filter states
   const [statusFilter, setStatusFilter] = useState('all');
   const [assigneeFilter, setAssigneeFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-
-  const [message, setMessage] = useState("Loading...");
-  
-
-  useEffect(() => {
-    fetch("http://127.0.0.1:5000/api/hello")
-      .then(response => response.json())
-      .then(data => {
-        setMessage(data.message);
-        console.log(data.message);
-      });
-  }, []);
-
-  //  useEffect(() => {
-  //   fetch("http://127.0.0.1:5000/")
-  //     .then((res) => res.json())
-  //     .then((data) => setTasks(data));
-  // }, []);
 
   useEffect(() => {
     setAuthenticated(isAuthenticated());
@@ -53,8 +37,18 @@ export default function Home() {
     }
   }, []);
 
-  const loadTasks = () => {
-    setTasks(getTasks());
+  const loadTasks = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch("http://localhost:5000/database");
+      if (!response.ok) throw new Error("Failed to fetch tasks");
+      const data = await response.json();
+      setTasks(data);
+    } catch (error) {
+      console.error(error);
+      setTasks([]);
+    }
+    setLoading(false);
   };
 
   const handleLogin = () => {
@@ -84,26 +78,70 @@ export default function Home() {
     setIsTaskFormOpen(true);
   };
 
-  const handleTaskSubmit = (taskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>) => {
-    if (editingTask) {
-      updateTask(editingTask.id, taskData);
-    } else {
-      createTask(taskData);
+  const handleTaskSubmit = async (taskData: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>) => {
+    setLoading(true);
+    try {
+      if (editingTask) {
+        // Edit mode: update existing task in database
+        // Pastikan updateTask di tasks.ts melakukan request PATCH/PUT ke backend
+        await updateTask(editingTask.id, taskData);
+        toast({
+          title: "Task updated",
+          description: "The task was updated successfully.",
+          variant: "default",
+        });
+      } else {
+        // Create: create new task in database
+        const user_id = "1";
+        await createTask({ ...taskData, user_id });
+        toast({
+          title: "Task created",
+          description: "The task was created successfully.",
+          variant: "default",
+        });
+      }
+      await loadTasks(); // Refresh tasks from database
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Error",
+        description: editingTask ? "Failed to update the task." : "Failed to create the task.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsTaskFormOpen(false);
+      setEditingTask(null);
+      setLoading(false);
     }
-    loadTasks();
-    setIsTaskFormOpen(false);
-    setEditingTask(null);
   };
 
   const handleDeleteTask = (id: string) => {
+    console.log('Test delete: handleDeleteTask called with id:', id);
     setDeletingTaskId(id);
   };
 
-  const confirmDeleteTask = () => {
+  const confirmDeleteTask = async () => {
     if (deletingTaskId) {
-      deleteTask(deletingTaskId);
-      loadTasks();
-      setDeletingTaskId(null);
+      setLoading(true);
+      try {
+        await deleteTask(deletingTaskId); // Delete from database
+        await loadTasks(); // Refresh tasks from database
+        toast({
+          title: "Task deleted",
+          description: "The task was deleted successfully.",
+          variant: "default",
+        });
+      } catch (error) {
+        console.error('Error deleting task', error);
+        toast({
+          title: "Error",
+          description: "Failed to delete the task.",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+        setDeletingTaskId(null);
+      }
     }
   };
 
@@ -151,8 +189,9 @@ export default function Home() {
       <Header onLogout={handleLogout} onCreateTask={handleCreateTask} />
 
       <main className="container mx-auto px-4 py-8">
-        <div>{message}</div>
-        <br /><br />
+        {/* <div>{message}</div> 
+          <br /><br /> */}
+        
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900 mb-2">Dashboard</h2>
           <p className="text-muted-foreground">Manage your tasks efficiently</p>
@@ -177,7 +216,9 @@ export default function Home() {
           onClearFilters={handleClearFilters}
         />
 
-        {filteredTasks.length === 0 ? (
+        {loading ? (
+          <div className="text-center py-12 text-lg text-gray-500">Loading tasks...</div>
+        ) : filteredTasks.length === 0 ? (
           <div className="text-center py-12">
             <div className="max-w-md mx-auto">
               <div className="h-64 w-64 mx-auto mb-6 bg-gray-100 rounded-lg flex items-center justify-center">
@@ -210,6 +251,7 @@ export default function Home() {
                 onEdit={handleEditTask}
                 onDelete={handleDeleteTask}
                 onStatusChange={handleStatusChange}
+                loading={deletingTaskId === task.id && loading}
               />
             ))}
           </div>
@@ -235,9 +277,14 @@ export default function Home() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDeleteTask}>Delete</AlertDialogAction>
+            <AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteTask} disabled={loading}>
+              {loading ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
           </AlertDialogFooter>
+          {loading && (
+            <div className="text-center py-2 text-muted-foreground text-sm">Deleting...</div>
+          )}
         </AlertDialogContent>
       </AlertDialog>
     </div>

@@ -14,6 +14,7 @@ interface TaskCardProps {
   onEdit: (task: Task) => void;
   onDelete: (id: string) => void;
   onStatusChange: (id: string, status: Task['status']) => void;
+  loading?: boolean; // add loading prop
 }
 
 const statusColors = {
@@ -28,7 +29,7 @@ const statusNextState = {
   'Done': 'Todo' as const,
 };
 
-export function TaskCard({ task, onEdit, onDelete, onStatusChange }: TaskCardProps) {
+export function TaskCard({ task, onEdit, onDelete, onStatusChange, loading }: TaskCardProps) {
   const users = getUsers();
   const assignee = users.find(user => user.id === task.assigneeId);
   const deadlineDate = new Date(task.deadline);
@@ -65,8 +66,13 @@ export function TaskCard({ task, onEdit, onDelete, onStatusChange }: TaskCardPro
               size="sm"
               onClick={() => onDelete(task.id)}
               className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+              disabled={loading}
             >
-              <Trash2 className="h-4 w-4" />
+              {loading ? (
+                <span className="animate-spin h-4 w-4 border-2 border-t-2 border-destructive rounded-full inline-block" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
             </Button>
           </div>
         </div>
