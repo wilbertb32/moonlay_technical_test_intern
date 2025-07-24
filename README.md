@@ -12,3 +12,4 @@ Untuk jalankan backend di terminal:
 Untuk menjalankan fetch di frontend:
 1. buka dua sisi terminal (satu masuk ke dalam folder client, satu masuk ke dalam folder server)
 2. untuk client ketik npm run dev, untuk server ketik env/Scripts/activate untuk menyalakan environment nya, lalu ketik python server.py untuk jalankan backend development server.
+3. untuk CRUD database, ketik env/Scripts/activate untuk menyalakan environment nya, lalu ketik python database.py, jika sudah nyala bisa create read update delete task tersebut.
